@@ -1,0 +1,39 @@
+<!-- public/index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>UNZA Complaint System</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
+        form { display: grid; gap: 15px; }
+        label { font-weight: bold; }
+        input, textarea, select { padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        button { background: #0066cc; color: white; border: none; padding: 10px; cursor: pointer; }
+        button:hover { background: #0055aa; }
+    </style>
+</head>
+<body>
+    <h1>Submit a Complaint</h1>
+    <form action="/submit-complaint" method="POST">
+        <label for="computer_number">Computer Number:</label>
+        <input type="text" id="computer_number" name="computer_number" required placeholder="ST001">
+
+        <label for="title">Title:</label>
+        <input type="text" id="title" name="title" required placeholder="Broken chair">
+
+        <label for="category">Category:</label>
+        <select id="category" name="category" required>
+            <option value="">Select...</option>
+            <option value="facilities">Facilities</option>
+            <option value="academic">Academic</option>
+            <option value="harassment">Harassment</option>
+            <option value="other">Other</option>
+        </select>
+
+        <label for="description">Description:</label>
+        <textarea id="description" name="description" rows="4" required></textarea>
+
+        <button type="submit">Submit Complaint</button>
+    </form>
+</body>
+</html>
