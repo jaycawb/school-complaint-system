@@ -11,11 +11,11 @@ import { promisePool, testConnection } from './config/db.js';
 dotenv.config();
 
 // Import routes (we'll create these next)
-// import authRoutes from './routes/auth.js';
-// import complaintRoutes from './routes/complaints.js';
-// import meetingRoutes from './routes/meetings.js';
-// import userRoutes from './routes/users.js';
-// import adminRoutes from './routes/admin.js';
+import authRoutes from './routes/auth.js';
+import complaintRoutes from './routes/complaints.js';
+import meetingRoutes from './routes/meetings.js';
+import userRoutes from './routes/users.js';
+import adminRoutes from './routes/admin.js';
 
 // Import middleware
 // import { errorHandler } from './middleware/errorHandler.js';
@@ -100,11 +100,11 @@ app.get('/', (req, res) => {
 });
 
 // API Routes (uncomment as you create them)
-// app.use('/api/auth', authRoutes);
-// app.use('/api/complaints', complaintRoutes);
-// app.use('/api/meetings', meetingRoutes);
-// app.use('/api/users', userRoutes);
-// app.use('/api/admin', adminRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/complaints', complaintRoutes);
+app.use('/api/meetings', meetingRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Test database route
 app.get('/api/test-db', async (req, res) => {

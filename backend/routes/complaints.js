@@ -4,6 +4,160 @@ import { promisePool } from '../config/db.js';
 
 const router = express.Router();
 
+// GET /complaints/categories - Get available complaint categories (MOVED BEFORE /:id)
+router.get('/categories', (req, res) => {
+  const categories = [
+    {
+      value: 'academics',
+      label: 'Academic Issues',
+      description: 'Course problems, teaching issues, academic misconduct'
+    },
+    {
+      value: 'facilities',
+      label: 'Facilities & Infrastructure',
+      description: 'Buildings, classrooms, equipment, maintenance issues'
+    },
+    {
+      value: 'accommodation',
+      label: 'Accommodation',
+      description: 'Hostel issues, housing problems, roommate conflicts'
+    },
+    {
+      value: 'finances',
+      label: 'Financial Issues',
+      description: 'Fee payments, bursaries, financial aid, billing problems'
+    },
+    {
+      value: 'missing_results',
+      label: 'Missing Results',
+      description: 'Missing grades, transcripts, exam results not published'
+    },
+    {
+      value: 'registration',
+      label: 'Registration',
+      description: 'Course registration, enrollment issues, timetable conflicts'
+    },
+    {
+      value: 'transport',
+      label: 'Transport Services',
+      description: 'Campus shuttle, transport delays, route issues'
+    },
+    {
+      value: 'library',
+      label: 'Library Services',
+      description: 'Library resources, access issues, book availability'
+    },
+    {
+      value: 'cafeteria',
+      label: 'Food Services',
+      description: 'Cafeteria, dining hall, food quality and service'
+    },
+    {
+      value: 'health_services',
+      label: 'Health Services',
+      description: 'Campus clinic, medical services, health insurance'
+    },
+    {
+      value: 'harassment',
+      label: 'Harassment & Discrimination',
+      description: 'Sexual harassment, discrimination, bullying, safety concerns'
+    },
+    {
+      value: 'administrative',
+      label: 'Administrative Services',
+      description: 'Documentation, certificates, administrative delays'
+    },
+    {
+      value: 'internet_network',
+      label: 'Internet & Network',
+      description: 'WiFi connectivity, network issues, computer lab problems'
+    },
+    {
+      value: 'disciplinary',
+      label: 'Disciplinary Issues',
+      description: 'Student conduct, disciplinary actions, appeals'
+    },
+    {
+      value: 'sports_recreation',
+      label: 'Sports & Recreation',
+      description: 'Sports facilities, recreational activities, gym access'
+    },
+    {
+      value: 'other',
+      label: 'Other',
+      description: 'Issues not covered by other categories'
+    }
+  ];
+
+  res.json({
+    success: true,
+    data: categories
+  });
+});
+
+// GET /complaints/admin/stats - Get complaint statistics (MOVED BEFORE /:id)
+router.get('/admin/stats', async (req, res) => {
+  try {
+    const statsQuery = `
+      SELECT 
+        COUNT(*) as total_complaints,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress,
+        SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved,
+        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
+        SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) as closed,
+        SUM(CASE WHEN priority = 'urgent' THEN 1 ELSE 0 END) as urgent,
+        SUM(CASE WHEN anonymous = 1 THEN 1 ELSE 0 END) as anonymous,
+        COUNT(DISTINCT category) as categories
+      FROM complaints
+    `;
+
+    // Get category breakdown
+    const categoryQuery = `
+      SELECT 
+        category,
+        COUNT(*) as count,
+        SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved_count
+      FROM complaints 
+      GROUP BY category 
+      ORDER BY count DESC
+    `;
+
+    // Get recent trends (last 30 days)
+    const trendsQuery = `
+      SELECT 
+        DATE(created_at) as date,
+        COUNT(*) as daily_count
+      FROM complaints 
+      WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      GROUP BY DATE(created_at)
+      ORDER BY date ASC
+    `;
+
+    const [stats] = await promisePool.query(statsQuery);
+    const [categoryStats] = await promisePool.query(categoryQuery);
+    const [trends] = await promisePool.query(trendsQuery);
+
+    res.json({
+      success: true,
+      data: {
+        overview: stats[0],
+        categories: categoryStats,
+        trends: trends
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch statistics. Please try again.',
+      error_code: 'STATS_ERROR'
+    });
+  }
+});
+
 // POST /complaints - Submit new complaint
 router.post('/', async (req, res) => {
   try {
@@ -18,24 +172,12 @@ router.post('/', async (req, res) => {
       anonymous = false
     } = req.body;
 
-    // Define valid categories for UNZA
+    // Define valid categories for UNZA (matching your DB enum)
     const validCategories = [
-      'academics',           // Academic issues, course problems
-      'facilities',          // Buildings, classrooms, equipment
-      'accommodation',       // Hostels, housing issues
-      'finances',           // Fees, payments, financial aid
-      'missing_results',    // Missing grades, transcripts
-      'registration',       // Course registration, enrollment
-      'transport',          // Campus transport, shuttle services  
-      'library',            // Library services, resources
-      'cafeteria',          // Food services, dining
-      'health_services',    // Campus clinic, medical
-      'harassment',         // Harassment, discrimination
-      'administrative',     // Admin services, documentation
-      'internet_network',   // WiFi, network connectivity
-      'disciplinary',       // Student conduct issues
-      'sports_recreation',  // Sports facilities, activities
-      'other'              // Miscellaneous complaints
+      'academics', 'facilities', 'accommodation', 'finances', 'missing_results',
+      'registration', 'transport', 'library', 'cafeteria', 'health_services',
+      'harassment', 'administrative', 'internet_network', 'disciplinary',
+      'sports_recreation', 'other'
     ];
 
     const validPriorities = ['low', 'medium', 'high', 'urgent'];
@@ -80,11 +222,28 @@ router.post('/', async (req, res) => {
 
     // Validate computer number format (UNZA format: 4 digits + 6 digits)
     if (!anonymous && computer_number) {
-      const computerNumberRegex = /^\d{4}\d{6}$/; // e.g., 20191234567
+      const computerNumberRegex = /^\d{10}$/; // 10 digits total
       if (!computerNumberRegex.test(computer_number)) {
         return res.status(400).json({
           success: false,
-          message: 'Invalid computer number format. Expected format: YYYYNNNNNN (e.g., 2019123456)'
+          message: 'Invalid computer number format. Expected format: 10 digits (e.g., 2019123456)'
+        });
+      }
+    }
+
+    // For non-anonymous complaints, verify user exists
+    if (!anonymous && computer_number) {
+      const [userExists] = await promisePool.query(
+        'SELECT computer_number FROM users WHERE computer_number = ?',
+        [computer_number]
+      );
+
+      if (userExists.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Computer number not found. Please ensure you are registered in the system.',
+          error_code: 'USER_NOT_FOUND',
+          hint: 'Contact the admin to register your computer number or submit as anonymous complaint'
         });
       }
     }
@@ -107,12 +266,6 @@ router.post('/', async (req, res) => {
       contact_email || null,
       anonymous ? 1 : 0
     ]);
-
-    // Get the created complaint
-    const [newComplaint] = await promisePool.query(
-      'SELECT * FROM complaints WHERE complaint_id = ?',
-      [result.insertId]
-    );
 
     res.status(201).json({
       success: true,
@@ -296,6 +449,7 @@ router.get('/:id', async (req, res) => {
         anonymous,
         admin_response,
         admin_notes,
+        assigned_to,
         created_at,
         updated_at,
         resolved_at
@@ -329,7 +483,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// PUT /complaints/:id - Update complaint status
+// PUT /complaints/:id - Update complaint status (Admin only)
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -337,7 +491,8 @@ router.put('/:id', async (req, res) => {
       status,
       admin_response,
       admin_notes,
-      priority
+      priority,
+      assigned_to
     } = req.body;
 
     // Validate ID
@@ -407,6 +562,11 @@ router.put('/:id', async (req, res) => {
       queryParams.push(priority);
     }
 
+    if (assigned_to) {
+      updateFields.push('assigned_to = ?');
+      queryParams.push(assigned_to);
+    }
+
     if (updateFields.length === 0) {
       return res.status(400).json({
         success: false,
@@ -449,155 +609,51 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// GET /complaints/categories - Get available complaint categories
-router.get('/categories', (req, res) => {
-  const categories = [
-    {
-      value: 'academics',
-      label: 'Academic Issues',
-      description: 'Course problems, teaching issues, academic misconduct'
-    },
-    {
-      value: 'facilities',
-      label: 'Facilities & Infrastructure',
-      description: 'Buildings, classrooms, equipment, maintenance issues'
-    },
-    {
-      value: 'accommodation',
-      label: 'Accommodation',
-      description: 'Hostel issues, housing problems, roommate conflicts'
-    },
-    {
-      value: 'finances',
-      label: 'Financial Issues',
-      description: 'Fee payments, bursaries, financial aid, billing problems'
-    },
-    {
-      value: 'missing_results',
-      label: 'Missing Results',
-      description: 'Missing grades, transcripts, exam results not published'
-    },
-    {
-      value: 'registration',
-      label: 'Registration',
-      description: 'Course registration, enrollment issues, timetable conflicts'
-    },
-    {
-      value: 'transport',
-      label: 'Transport Services',
-      description: 'Campus shuttle, transport delays, route issues'
-    },
-    {
-      value: 'library',
-      label: 'Library Services',
-      description: 'Library resources, access issues, book availability'
-    },
-    {
-      value: 'cafeteria',
-      label: 'Food Services',
-      description: 'Cafeteria, dining hall, food quality and service'
-    },
-    {
-      value: 'health_services',
-      label: 'Health Services',
-      description: 'Campus clinic, medical services, health insurance'
-    },
-    {
-      value: 'harassment',
-      label: 'Harassment & Discrimination',
-      description: 'Sexual harassment, discrimination, bullying, safety concerns'
-    },
-    {
-      value: 'administrative',
-      label: 'Administrative Services',
-      description: 'Documentation, certificates, administrative delays'
-    },
-    {
-      value: 'internet_network',
-      label: 'Internet & Network',
-      description: 'WiFi connectivity, network issues, computer lab problems'
-    },
-    {
-      value: 'disciplinary',
-      label: 'Disciplinary Issues',
-      description: 'Student conduct, disciplinary actions, appeals'
-    },
-    {
-      value: 'sports_recreation',
-      label: 'Sports & Recreation',
-      description: 'Sports facilities, recreational activities, gym access'
-    },
-    {
-      value: 'other',
-      label: 'Other',
-      description: 'Issues not covered by other categories'
-    }
-  ];
-
-  res.json({
-    success: true,
-    data: categories
-  });
-});
-
-// GET /complaints/admin/stats - Get complaint statistics
-router.get('/admin/stats', async (req, res) => {
+// DELETE /complaints/:id - Delete complaint (Admin only - soft delete recommended)
+router.delete('/:id', async (req, res) => {
   try {
-    const statsQuery = `
-      SELECT 
-        COUNT(*) as total_complaints,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-        SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress,
-        SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved,
-        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
-        SUM(CASE WHEN priority = 'urgent' THEN 1 ELSE 0 END) as urgent,
-        SUM(CASE WHEN anonymous = 1 THEN 1 ELSE 0 END) as anonymous,
-        COUNT(DISTINCT category) as categories
-      FROM complaints
-    `;
+    const { id } = req.params;
 
-    // Get category breakdown
-    const categoryQuery = `
-      SELECT 
-        category,
-        COUNT(*) as count,
-        SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved_count
-      FROM complaints 
-      GROUP BY category 
-      ORDER BY count DESC
-    `;
+    // Validate ID
+    if (!id || isNaN(parseInt(id))) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid complaint ID provided'
+      });
+    }
 
-    // Get recent trends (last 30 days)
-    const trendsQuery = `
-      SELECT 
-        DATE(created_at) as date,
-        COUNT(*) as daily_count
-      FROM complaints 
-      WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-      GROUP BY DATE(created_at)
-      ORDER BY date ASC
-    `;
+    // Check if complaint exists
+    const [existingComplaint] = await promisePool.query(
+      'SELECT complaint_id FROM complaints WHERE complaint_id = ?',
+      [parseInt(id)]
+    );
 
-    const [stats] = await promisePool.query(statsQuery);
-    const [categoryStats] = await promisePool.query(categoryQuery);
-    const [trends] = await promisePool.query(trendsQuery);
+    if (existingComplaint.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Complaint not found',
+        error_code: 'NOT_FOUND'
+      });
+    }
+
+    // For now, we'll do a hard delete. In production, consider soft delete
+    await promisePool.query(
+      'DELETE FROM complaints WHERE complaint_id = ?',
+      [parseInt(id)]
+    );
 
     res.json({
       success: true,
-      data: {
-        overview: stats[0],
-        categories: categoryStats,
-        trends: trends
-      }
+      message: 'Complaint deleted successfully'
     });
 
   } catch (error) {
-    console.error('Error fetching stats:', error);
+    console.error('Error deleting complaint:', error);
     
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch statistics. Please try again.',
-      error_code: 'STATS_ERROR'
+      message: 'Failed to delete complaint. Please try again.',
+      error_code: 'DELETE_ERROR'
     });
   }
 });
